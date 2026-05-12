@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: private-drive-stremio-addon
+    runtime: node
+    plan: free
+    buildCommand: ""
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20

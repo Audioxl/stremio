@@ -1,0 +1,13 @@
+{
+  "name": "private-drive-stremio-addon",
+  "version": "1.0.0",
+  "description": "Private Stremio add-on for streaming personal Google Drive video files.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
