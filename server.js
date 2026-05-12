@@ -6,8 +6,25 @@ import { extname } from "node:path";
 const PORT = Number(process.env.PORT || 7000);
 const HOST = process.env.HOST || "0.0.0.0";
 const BASE_URL = process.env.BASE_URL || "";
-const CATALOG_ID = "private-drive-videos";
+const SERIES_CATALOG_ID = "private-drive-series";
+const MOVIE_CATALOG_ID = "private-drive-movies";
 const RESOURCE_TYPES = ["catalog", "meta", "stream"];
+const SERIES = [
+  {
+    id: "series:spyxfamily",
+    name: "SPYXFAMILY",
+    match: /^SPYXFAMILY (\d+)X(\d+)$/i,
+    poster: "https://drive.google.com/thumbnail?id=1yxMM8CX-71ht8s3wmhKGWRClFIPEaWgp&sz=w780",
+    description: "SPYXFAMILY"
+  },
+  {
+    id: "series:death-note",
+    name: "DEATH NOTE",
+    match: /^DEATH NOTE (\d+)$/i,
+    poster: "https://drive.google.com/thumbnail?id=1K2eRqmwDaEimYzn01yFHdNuA5RSFfsms&sz=w780",
+    description: "DEATH NOTE"
+  }
+];
 
 const manifest = {
   id: "org.personal.drive-videos",
@@ -15,15 +32,20 @@ const manifest = {
   name: "Private Drive Videos",
   description: "A private Stremio add-on for your own Google Drive videos.",
   resources: RESOURCE_TYPES,
-  types: ["movie"],
+  types: ["series", "movie"],
   catalogs: [
     {
+      type: "series",
+      id: SERIES_CATALOG_ID,
+      name: "Anime Series"
+    },
+    {
       type: "movie",
-      id: CATALOG_ID,
-      name: "Google Drive"
+      id: MOVIE_CATALOG_ID,
+      name: "Anime Movies"
     }
   ],
-  idPrefixes: ["drive:"],
+  idPrefixes: ["series:", "drive:"],
   behaviorHints: {
     configurable: false,
     adult: false
@@ -59,6 +81,7 @@ function normalizeVideo(video, index) {
 
   const id = `drive:${driveId}`;
   const title = video.title || `Drive video ${index + 1}`;
+  const seriesInfo = getSeriesInfo(title);
   const poster = video.poster || `https://drive.google.com/thumbnail?id=${driveId}&sz=w780`;
   const filename = video.filename || title;
 
@@ -67,6 +90,8 @@ function normalizeVideo(video, index) {
     id,
     driveId,
     title,
+    seriesInfo,
+    mediaType: seriesInfo ? "series" : "movie",
     filename,
     poster,
     description: video.description || "",
@@ -90,7 +115,22 @@ function extractDriveId(value) {
   return "";
 }
 
-function toMetaPreview(video) {
+function getSeriesInfo(title) {
+  for (const series of SERIES) {
+    const match = title.match(series.match);
+    if (!match) continue;
+
+    if (series.id === "series:death-note") {
+      return { seriesId: series.id, season: 1, episode: Number(match[1]) };
+    }
+
+    return { seriesId: series.id, season: Number(match[1]), episode: Number(match[2]) };
+  }
+
+  return null;
+}
+
+function toMovieMetaPreview(video) {
   return {
     id: video.id,
     type: "movie",
@@ -103,12 +143,45 @@ function toMetaPreview(video) {
   };
 }
 
-function toFullMeta(video) {
+function toMovieFullMeta(video) {
   return {
-    ...toMetaPreview(video),
+    ...toMovieMetaPreview(video),
     background: video.background || video.poster,
     logo: video.logo,
     videos: []
+  };
+}
+
+function toSeriesMetaPreview(series) {
+  return {
+    id: series.id,
+    type: "series",
+    name: series.name,
+    poster: series.poster,
+    posterShape: "poster",
+    description: series.description,
+    genres: ["Anime"]
+  };
+}
+
+function toSeriesFullMeta(series, videos) {
+  const episodes = videos
+    .filter((video) => video.seriesInfo?.seriesId === series.id)
+    .sort((a, b) => a.seriesInfo.season - b.seriesInfo.season || a.seriesInfo.episode - b.seriesInfo.episode)
+    .map((video) => ({
+      id: video.id,
+      title: video.title,
+      season: video.seriesInfo.season,
+      episode: video.seriesInfo.episode,
+      released: video.released,
+      thumbnail: video.poster,
+      overview: video.description
+    }));
+
+  return {
+    ...toSeriesMetaPreview(series),
+    background: series.background || series.poster,
+    videos: episodes
   };
 }
 
@@ -162,19 +235,31 @@ async function route(req, res) {
 
   const videos = await loadVideos();
 
-  if (url.pathname === `/catalog/movie/${CATALOG_ID}.json`) {
-    sendJson(res, { metas: videos.map(toMetaPreview) });
+  if (url.pathname === `/catalog/series/${SERIES_CATALOG_ID}.json`) {
+    sendJson(res, { metas: SERIES.map(toSeriesMetaPreview) });
     return;
   }
 
-  const metaMatch = url.pathname.match(/^\/meta\/movie\/(.+)\.json$/);
-  if (metaMatch) {
-    const video = findVideo(videos, decodeURIComponent(metaMatch[1]));
-    sendJson(res, { meta: video ? toFullMeta(video) : null }, video ? 200 : 404);
+  if (url.pathname === `/catalog/movie/${MOVIE_CATALOG_ID}.json`) {
+    sendJson(res, { metas: videos.filter((video) => video.mediaType === "movie").map(toMovieMetaPreview) });
     return;
   }
 
-  const streamMatch = url.pathname.match(/^\/stream\/movie\/(.+)\.json$/);
+  const seriesMetaMatch = url.pathname.match(/^\/meta\/series\/(.+)\.json$/);
+  if (seriesMetaMatch) {
+    const series = SERIES.find((item) => item.id === decodeURIComponent(seriesMetaMatch[1]));
+    sendJson(res, { meta: series ? toSeriesFullMeta(series, videos) : null }, series ? 200 : 404);
+    return;
+  }
+
+  const movieMetaMatch = url.pathname.match(/^\/meta\/movie\/(.+)\.json$/);
+  if (movieMetaMatch) {
+    const video = findVideo(videos, decodeURIComponent(movieMetaMatch[1]));
+    sendJson(res, { meta: video ? toMovieFullMeta(video) : null }, video ? 200 : 404);
+    return;
+  }
+
+  const streamMatch = url.pathname.match(/^\/stream\/(?:movie|series)\/(.+)\.json$/);
   if (streamMatch) {
     const video = findVideo(videos, decodeURIComponent(streamMatch[1]));
     if (!video) {
@@ -182,18 +267,14 @@ async function route(req, res) {
       return;
     }
 
-    sendJson(res, {
-      streams: [
-        {
-          title: video.streamTitle || "Google Drive",
-          name: video.title,
-          url: streamUrl(req, video),
-          behaviorHints: {
-            notWebReady: ![".mp4", ".m4v", ".webm"].includes(extname(video.filename).toLowerCase())
-          }
-        }
-      ]
-    });
+    sendJson(res, { streams: [toStream(req, video)] });
+    return;
+  }
+
+  const legacyMetaMatch = url.pathname.match(/^\/meta\/movie\/(.+)\.json$/);
+  if (legacyMetaMatch) {
+    const video = findVideo(videos, decodeURIComponent(legacyMetaMatch[1]));
+    sendJson(res, { meta: video ? toMovieFullMeta(video) : null }, video ? 200 : 404);
     return;
   }
 
@@ -210,6 +291,17 @@ async function route(req, res) {
 
 function findVideo(videos, id) {
   return videos.find((video) => video.id === id || video.driveId === id);
+}
+
+function toStream(req, video) {
+  return {
+    title: video.streamTitle || "Google Drive",
+    name: video.title,
+    url: streamUrl(req, video),
+    behaviorHints: {
+      notWebReady: ![".mp4", ".m4v", ".webm"].includes(extname(video.filename).toLowerCase())
+    }
+  };
 }
 
 async function proxyDriveVideo(req, res, driveId, filename) {

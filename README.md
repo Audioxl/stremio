@@ -2,6 +2,12 @@
 
 Add-on privato per Stremio che mostra un catalogo di video personali salvati su Google Drive.
 
+Il catalogo raggruppa automaticamente:
+
+- `SPYXFAMILY 1X1`, `SPYXFAMILY 2X1`, ecc. nella serie **SPYXFAMILY**
+- `DEATH NOTE 1`, `DEATH NOTE 2`, ecc. nella serie **DEATH NOTE**
+- i titoli non episodici, come `SPYXFAMILY MOVIE`, nel catalogo film
+
 ## Requisiti
 
 - Node.js 18 o superiore
