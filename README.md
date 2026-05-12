@@ -61,7 +61,7 @@ http://192.168.1.50:7000/manifest.json
 
 - Google Drive deve permettere la lettura del file a chi ha il link.
 - I file `.mp4`, `.m4v` e `.webm` sono i più compatibili con Stremio.
-- File molto grandi o non scaricabili direttamente da Google Drive potrebbero richiedere una soluzione con autenticazione o proxy, da aggiungere in una seconda fase.
+- Lo stream passa attraverso un piccolo proxy dell'add-on, cosi' Stremio riceve il file video invece delle pagine intermedie di Google Drive.
 - Usa questo add-on solo per contenuti che hai il diritto di visualizzare e trasmettere sui tuoi dispositivi.
 
 ## Deploy su Render

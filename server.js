@@ -1,4 +1,5 @@
 import http from "node:http";
+import { Readable } from "node:stream";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 
@@ -32,7 +33,8 @@ const manifest = {
 const jsonHeaders = {
   "content-type": "application/json; charset=utf-8",
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "*"
+  "access-control-allow-headers": "*",
+  "access-control-expose-headers": "content-length, content-range, accept-ranges"
 };
 
 const contentTypeByExtension = {
@@ -119,6 +121,19 @@ function driveDownloadUrl(driveId) {
   return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveId)}`;
 }
 
+function driveConfirmUrl(driveId, confirmation) {
+  const url = new URL("https://drive.usercontent.google.com/download");
+  url.searchParams.set("id", driveId);
+  url.searchParams.set("export", "download");
+  url.searchParams.set("confirm", confirmation.confirm);
+
+  if (confirmation.uuid) {
+    url.searchParams.set("uuid", confirmation.uuid);
+  }
+
+  return url.toString();
+}
+
 function publicBaseUrl(req) {
   if (BASE_URL) return BASE_URL.replace(/\/$/, "");
 
@@ -186,14 +201,7 @@ async function route(req, res) {
   if (driveMatch) {
     const driveId = decodeURIComponent(driveMatch[1]);
     const filename = decodeURIComponent(url.pathname.split("/").at(-1) || "");
-    const type = contentTypeByExtension[extname(filename).toLowerCase()] || "application/octet-stream";
-
-    res.writeHead(302, {
-      location: driveDownloadUrl(driveId),
-      "content-type": type,
-      "access-control-allow-origin": "*"
-    });
-    res.end();
+    await proxyDriveVideo(req, res, driveId, filename);
     return;
   }
 
@@ -202,6 +210,102 @@ async function route(req, res) {
 
 function findVideo(videos, id) {
   return videos.find((video) => video.id === id || video.driveId === id);
+}
+
+async function proxyDriveVideo(req, res, driveId, filename) {
+  const fallbackType = contentTypeByExtension[extname(filename).toLowerCase()] || "application/octet-stream";
+  const driveResponse = await fetchDriveFile(driveId, req.headers.range);
+  const contentType = driveResponse.headers.get("content-type") || fallbackType;
+
+  if (contentType.includes("text/html")) {
+    sendJson(
+      res,
+      {
+        error: "Google Drive returned an HTML page instead of the video file.",
+        hint: "Check that the file is shared with anyone who has the link and is downloadable."
+      },
+      502
+    );
+    return;
+  }
+
+  const headers = {
+    "content-type": contentType,
+    "access-control-allow-origin": "*",
+    "access-control-allow-headers": "*",
+    "access-control-expose-headers": "content-length, content-range, accept-ranges",
+    "accept-ranges": driveResponse.headers.get("accept-ranges") || "bytes",
+    "cache-control": "no-store"
+  };
+
+  copyHeader(driveResponse, headers, "content-length");
+  copyHeader(driveResponse, headers, "content-range");
+  copyHeader(driveResponse, headers, "last-modified");
+  copyHeader(driveResponse, headers, "etag");
+
+  res.writeHead(driveResponse.status, headers);
+
+  if (req.method === "HEAD" || !driveResponse.body) {
+    res.end();
+    return;
+  }
+
+  Readable.fromWeb(driveResponse.body).pipe(res);
+}
+
+async function fetchDriveFile(driveId, range) {
+  const firstResponse = await requestDrive(driveDownloadUrl(driveId), range);
+  const firstType = firstResponse.headers.get("content-type") || "";
+
+  if (!firstType.includes("text/html")) {
+    return firstResponse;
+  }
+
+  const html = await firstResponse.text();
+  const confirmation = extractDriveConfirmation(html);
+  if (!confirmation.confirm) {
+    return new Response(html, {
+      status: firstResponse.status,
+      headers: firstResponse.headers
+    });
+  }
+
+  return requestDrive(driveConfirmUrl(driveId, confirmation), range);
+}
+
+function requestDrive(url, range) {
+  const headers = {
+    "user-agent": "Mozilla/5.0",
+    accept: "*/*"
+  };
+
+  if (range) headers.range = range;
+
+  return fetch(url, {
+    headers,
+    redirect: "follow"
+  });
+}
+
+function extractDriveConfirmation(html) {
+  return {
+    confirm: extractInputValue(html, "confirm") || extractPattern(html, /confirm=([0-9A-Za-z_-]+)&/) || extractPattern(html, /"confirm","([^"]+)"/),
+    uuid: extractInputValue(html, "uuid")
+  };
+}
+
+function extractInputValue(html, name) {
+  return extractPattern(html, new RegExp(`name="${name}"\\s+value="([^"]+)"`));
+}
+
+function extractPattern(html, pattern) {
+  const match = html.match(pattern);
+  return match ? match[1] : "";
+}
+
+function copyHeader(response, headers, name) {
+  const value = response.headers.get(name);
+  if (value) headers[name] = value;
 }
 
 function sendJson(res, body, status = 200) {
