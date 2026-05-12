@@ -29,20 +29,20 @@ const SERIES = [
 const manifest = {
   id: "org.personal.drive-videos",
   version: "1.0.0",
-  name: "Private Drive Videos",
-  description: "A private Stremio add-on for your own Google Drive videos.",
+  name: "MaxServer",
+  description: "Personal Google Drive video catalog.",
   resources: RESOURCE_TYPES,
   types: ["series", "movie"],
   catalogs: [
     {
       type: "series",
       id: SERIES_CATALOG_ID,
-      name: "Anime Series"
+      name: "MaxServer"
     },
     {
       type: "movie",
       id: MOVIE_CATALOG_ID,
-      name: "Anime Movies"
+      name: "MaxServer"
     }
   ],
   idPrefixes: ["series:", "drive:"],
