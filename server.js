@@ -1,5 +1,6 @@
 import http from "node:http";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 
@@ -346,6 +347,11 @@ async function proxyDriveVideo(req, res, driveId, filename) {
   const driveResponse = await fetchDriveFile(driveId, req.headers.range);
   const contentType = driveResponse.headers.get("content-type") || fallbackType;
 
+  if (!driveResponse.ok && driveResponse.status !== 206) {
+    sendJson(res, { error: `Google Drive returned HTTP ${driveResponse.status}` }, 502);
+    return;
+  }
+
   if (contentType.includes("text/html")) {
     sendJson(
       res,
@@ -379,7 +385,7 @@ async function proxyDriveVideo(req, res, driveId, filename) {
     return;
   }
 
-  Readable.fromWeb(driveResponse.body).pipe(res);
+  await pipeWebResponse(driveResponse.body, res);
 }
 
 async function proxyDrivePoster(res, driveId) {
@@ -411,7 +417,46 @@ async function proxyDrivePoster(res, driveId) {
     return;
   }
 
-  Readable.fromWeb(response.body).pipe(res);
+  await pipeWebResponse(response.body, res);
+}
+
+async function pipeWebResponse(webBody, res) {
+  const source = Readable.fromWeb(webBody);
+
+  source.on("error", (error) => {
+    console.warn("Upstream stream error:", error.message);
+    if (!res.destroyed) res.destroy(error);
+  });
+
+  res.on("error", (error) => {
+    console.warn("Client stream error:", error.message);
+    source.destroy(error);
+  });
+
+  res.on("close", () => {
+    source.destroy();
+  });
+
+  try {
+    await pipeline(source, res);
+  } catch (error) {
+    if (isExpectedStreamClose(error)) {
+      console.warn("Stream closed early:", error.code || error.message);
+      return;
+    }
+
+    console.error("Stream pipeline failed:", error);
+    if (!res.headersSent) {
+      sendJson(res, { error: "Stream failed" }, 502);
+    } else if (!res.destroyed) {
+      res.destroy(error);
+    }
+  }
+}
+
+function isExpectedStreamClose(error) {
+  return ["AbortError", "ERR_STREAM_PREMATURE_CLOSE", "ECONNRESET", "EPIPE"].includes(error?.name) ||
+    ["ABORT_ERR", "ERR_STREAM_PREMATURE_CLOSE", "ECONNRESET", "EPIPE"].includes(error?.code);
 }
 
 async function fetchDriveFile(driveId, range) {
