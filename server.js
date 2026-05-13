@@ -134,12 +134,12 @@ function getSeriesInfo(title) {
   return null;
 }
 
-function toMovieMetaPreview(video) {
+function toMovieMetaPreview(req, video) {
   return {
     id: video.id,
     type: "movie",
     name: video.title,
-    poster: video.poster,
+    poster: posterUrl(req, video.poster),
     posterShape: "poster",
     description: video.description,
     genres: asArray(video.genre),
@@ -147,28 +147,28 @@ function toMovieMetaPreview(video) {
   };
 }
 
-function toMovieFullMeta(video) {
+function toMovieFullMeta(req, video) {
   return {
-    ...toMovieMetaPreview(video),
-    background: video.background || video.poster,
+    ...toMovieMetaPreview(req, video),
+    background: posterUrl(req, video.background || video.poster),
     logo: video.logo,
     videos: []
   };
 }
 
-function toSeriesMetaPreview(series) {
+function toSeriesMetaPreview(req, series) {
   return {
     id: series.id,
     type: "series",
     name: series.name,
-    poster: series.poster,
+    poster: posterUrl(req, series.poster),
     posterShape: "poster",
     description: series.description,
     genres: ["Anime"]
   };
 }
 
-function toSeriesFullMeta(series, videos) {
+function toSeriesFullMeta(req, series, videos) {
   const episodes = videos
     .filter((video) => video.seriesInfo?.seriesId === series.id)
     .sort((a, b) => a.seriesInfo.season - b.seriesInfo.season || a.seriesInfo.episode - b.seriesInfo.episode)
@@ -178,14 +178,14 @@ function toSeriesFullMeta(series, videos) {
       season: video.seriesInfo.season,
       episode: video.seriesInfo.episode,
       released: video.released,
-      thumbnail: series.seasonPosters?.[video.seriesInfo.season] || video.poster,
+      thumbnail: posterUrl(req, series.seasonPosters?.[video.seriesInfo.season] || video.poster),
       overview: video.description
     }));
 
   return {
-    ...toSeriesMetaPreview(series),
-    background: series.background || series.poster,
-    seasonPosters: series.seasonPosters,
+    ...toSeriesMetaPreview(req, series),
+    background: posterUrl(req, series.background || series.poster),
+    seasonPosters: proxySeasonPosters(req, series.seasonPosters),
     videos: episodes
   };
 }
@@ -224,6 +224,23 @@ function streamUrl(req, video) {
   return `${publicBaseUrl(req)}/drive/${encodeURIComponent(video.driveId)}/${encodeURIComponent(video.filename)}`;
 }
 
+function posterUrl(req, poster) {
+  if (!poster) return poster;
+
+  const driveId = extractDriveId(poster);
+  if (!driveId) return poster;
+
+  return `${publicBaseUrl(req)}/poster/${encodeURIComponent(driveId)}.jpg`;
+}
+
+function proxySeasonPosters(req, seasonPosters) {
+  if (!seasonPosters) return undefined;
+
+  return Object.fromEntries(
+    Object.entries(seasonPosters).map(([season, poster]) => [season, posterUrl(req, poster)])
+  );
+}
+
 async function route(req, res) {
   const url = new URL(req.url, publicBaseUrl(req));
 
@@ -238,10 +255,16 @@ async function route(req, res) {
     return;
   }
 
+  const posterMatch = url.pathname.match(/^\/poster\/([^/]+)\.jpg$/);
+  if (posterMatch) {
+    await proxyDrivePoster(res, decodeURIComponent(posterMatch[1]));
+    return;
+  }
+
   const videos = await loadVideos();
 
   if (url.pathname === `/catalog/series/${SERIES_CATALOG_ID}.json`) {
-    sendJson(res, { metas: SERIES.map(toSeriesMetaPreview).sort(compareByName) });
+    sendJson(res, { metas: SERIES.map((series) => toSeriesMetaPreview(req, series)).sort(compareByName) });
     return;
   }
 
@@ -249,7 +272,7 @@ async function route(req, res) {
     sendJson(res, {
       metas: videos
         .filter((video) => video.mediaType === "movie")
-        .map(toMovieMetaPreview)
+        .map((video) => toMovieMetaPreview(req, video))
         .sort(compareByName)
     });
     return;
@@ -258,14 +281,14 @@ async function route(req, res) {
   const seriesMetaMatch = url.pathname.match(/^\/meta\/series\/(.+)\.json$/);
   if (seriesMetaMatch) {
     const series = SERIES.find((item) => item.id === decodeURIComponent(seriesMetaMatch[1]));
-    sendJson(res, { meta: series ? toSeriesFullMeta(series, videos) : null }, series ? 200 : 404);
+    sendJson(res, { meta: series ? toSeriesFullMeta(req, series, videos) : null }, series ? 200 : 404);
     return;
   }
 
   const movieMetaMatch = url.pathname.match(/^\/meta\/movie\/(.+)\.json$/);
   if (movieMetaMatch) {
     const video = findVideo(videos, decodeURIComponent(movieMetaMatch[1]));
-    sendJson(res, { meta: video ? toMovieFullMeta(video) : null }, video ? 200 : 404);
+    sendJson(res, { meta: video ? toMovieFullMeta(req, video) : null }, video ? 200 : 404);
     return;
   }
 
@@ -284,7 +307,7 @@ async function route(req, res) {
   const legacyMetaMatch = url.pathname.match(/^\/meta\/movie\/(.+)\.json$/);
   if (legacyMetaMatch) {
     const video = findVideo(videos, decodeURIComponent(legacyMetaMatch[1]));
-    sendJson(res, { meta: video ? toMovieFullMeta(video) : null }, video ? 200 : 404);
+    sendJson(res, { meta: video ? toMovieFullMeta(req, video) : null }, video ? 200 : 404);
     return;
   }
 
@@ -357,6 +380,38 @@ async function proxyDriveVideo(req, res, driveId, filename) {
   }
 
   Readable.fromWeb(driveResponse.body).pipe(res);
+}
+
+async function proxyDrivePoster(res, driveId) {
+  const response = await fetch(`https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w780`, {
+    headers: {
+      "user-agent": "Mozilla/5.0",
+      accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+    },
+    redirect: "follow"
+  });
+
+  const contentType = response.headers.get("content-type") || "image/jpeg";
+  if (!response.ok || !contentType.startsWith("image/")) {
+    sendJson(res, { error: "Poster not available" }, 502);
+    return;
+  }
+
+  const headers = {
+    "content-type": contentType,
+    "access-control-allow-origin": "*",
+    "cache-control": "public, max-age=86400"
+  };
+
+  copyHeader(response, headers, "content-length");
+  res.writeHead(200, headers);
+
+  if (!response.body) {
+    res.end();
+    return;
+  }
+
+  Readable.fromWeb(response.body).pipe(res);
 }
 
 async function fetchDriveFile(driveId, range) {
