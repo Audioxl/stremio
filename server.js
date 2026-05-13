@@ -14,7 +14,11 @@ const SERIES = [
     id: "series:spyxfamily",
     name: "SPYXFAMILY",
     match: /^SPYXFAMILY (\d+)X(\d+)$/i,
-    poster: "https://drive.google.com/thumbnail?id=1yxMM8CX-71ht8s3wmhKGWRClFIPEaWgp&sz=w780",
+    poster: "https://drive.google.com/thumbnail?id=124kGqfIzgelRD5VGCEiOoRGcdFoy2qqP&sz=w780",
+    seasonPosters: {
+      1: "https://drive.google.com/thumbnail?id=124kGqfIzgelRD5VGCEiOoRGcdFoy2qqP&sz=w780",
+      2: "https://drive.google.com/thumbnail?id=1Xf7j6iWx5fIV6dkhh7c_cnA7GguxTnLc&sz=w780"
+    },
     description: "SPYXFAMILY"
   },
   {
@@ -174,13 +178,14 @@ function toSeriesFullMeta(series, videos) {
       season: video.seriesInfo.season,
       episode: video.seriesInfo.episode,
       released: video.released,
-      thumbnail: video.poster,
+      thumbnail: series.seasonPosters?.[video.seriesInfo.season] || video.poster,
       overview: video.description
     }));
 
   return {
     ...toSeriesMetaPreview(series),
     background: series.background || series.poster,
+    seasonPosters: series.seasonPosters,
     videos: episodes
   };
 }
@@ -236,12 +241,17 @@ async function route(req, res) {
   const videos = await loadVideos();
 
   if (url.pathname === `/catalog/series/${SERIES_CATALOG_ID}.json`) {
-    sendJson(res, { metas: SERIES.map(toSeriesMetaPreview) });
+    sendJson(res, { metas: SERIES.map(toSeriesMetaPreview).sort(compareByName) });
     return;
   }
 
   if (url.pathname === `/catalog/movie/${MOVIE_CATALOG_ID}.json`) {
-    sendJson(res, { metas: videos.filter((video) => video.mediaType === "movie").map(toMovieMetaPreview) });
+    sendJson(res, {
+      metas: videos
+        .filter((video) => video.mediaType === "movie")
+        .map(toMovieMetaPreview)
+        .sort(compareByName)
+    });
     return;
   }
 
@@ -291,6 +301,10 @@ async function route(req, res) {
 
 function findVideo(videos, id) {
   return videos.find((video) => video.id === id || video.driveId === id);
+}
+
+function compareByName(a, b) {
+  return a.name.localeCompare(b.name, "it", { numeric: true, sensitivity: "base" });
 }
 
 function toStream(req, video) {

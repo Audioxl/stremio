@@ -262,6 +262,7 @@
     "title": "SPYXFAMILY MOVIE",
     "driveUrl": "https://drive.google.com/file/d/1OxL-sGwRUufGKZe7MbMZIiMlDlLB8-o2/view?usp=drive_link",
     "filename": "SPYXFAMILY MOVIE.mp4",
+    "poster": "https://drive.google.com/thumbnail?id=1VwP9JqfEsnu0TrHHiNGI1WWuWcCRuWSw&sz=w780",
     "description": "SPYXFAMILY MOVIE",
     "genre": "Anime"
   },
@@ -528,6 +529,7 @@
     "title": "MARTY SUPREME",
     "driveUrl": "https://drive.google.com/file/d/1Cp22IHKJf6HZhQ7rAPlnhXmS94Or92KJ/view?usp=drive_link",
     "filename": "MARTY SUPREME.mp4",
+    "poster": "https://drive.google.com/thumbnail?id=1n5wr8hhnvLL5yizeeiTKCdBGn1Exdm4i&sz=w780",
     "description": "MARTY SUPREME",
     "genre": "Film"
   },
@@ -535,6 +537,7 @@
     "title": "HARRY POTTER E L'ORDINE DELLA FENICE",
     "driveUrl": "https://drive.google.com/file/d/1GqkehqaJz0KOjT84Ru8V450wNrudKiGp/view?usp=drive_link",
     "filename": "HARRY POTTER E L'ORDINE DELLA FENICE.mp4",
+    "poster": "https://drive.google.com/thumbnail?id=1QNqo8Hr_ReW5VR9FsBPFM-sWBno7y91q&sz=w780",
     "description": "HARRY POTTER E L'ORDINE DELLA FENICE",
     "genre": "Film"
   },
@@ -542,6 +545,7 @@
     "title": "HARRY POTTER E IL PRINCIPE MEZZOSANGUE",
     "driveUrl": "https://drive.google.com/file/d/1rSIGu820YowBsuyxiOo4BUiyL1ewUZog/view?usp=drive_link",
     "filename": "HARRY POTTER E IL PRINCIPE MEZZOSANGUE.mp4",
+    "poster": "https://drive.google.com/thumbnail?id=10zwByMr80LHP6tRodX0BpbGtIVT4aujJ&sz=w780",
     "description": "HARRY POTTER E IL PRINCIPE MEZZOSANGUE",
     "genre": "Film"
   },
@@ -549,7 +553,16 @@
     "title": "HARRY POTTER E IL CALICE DI FUOCO",
     "driveUrl": "https://drive.google.com/file/d/1u3-KT23pfc0Qziy7wL_INBKp3__gZsm3/view?usp=drive_link",
     "filename": "HARRY POTTER E IL CALICE DI FUOCO.mp4",
+    "poster": "https://drive.google.com/thumbnail?id=13QxlWMO5kBUZlzZR8lfJNTHB7JsOqaYb&sz=w780",
     "description": "HARRY POTTER E IL CALICE DI FUOCO",
+    "genre": "Film"
+  },
+  {
+    "title": "HARRY POTTER E LA PIETRA FILOSOFALE",
+    "driveUrl": "https://drive.google.com/file/d/1hXr7GtkKE4-BEI7JtipjVqgiznLL0P8T/view?usp=drive_link",
+    "filename": "HARRY POTTER E LA PIETRA FILOSOFALE.mp4",
+    "poster": "https://drive.google.com/thumbnail?id=12W07zT22r0mVbhnSk-PUXi6mYtUGIp4V&sz=w780",
+    "description": "HARRY POTTER E LA PIETRA FILOSOFALE",
     "genre": "Film"
   }
 ]
